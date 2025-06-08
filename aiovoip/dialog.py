@@ -22,6 +22,12 @@ class CallState(enum.Enum):
     Terminated = enum.auto()
 
 
+class State(enum.Enum):
+    NULL = 0
+    EARLY = 1
+    CONFIRMED = 2
+    TERMINATED = 3
+    
 class DialogBase:
     def __init__(self,
                  app,
@@ -55,18 +61,56 @@ class DialogBase:
 
         self._closed = False
         self._closing = None
+        self._dialog_id = frozenset((self.original_msg.to_details['params'].get('tag'),
+                                     self.original_msg.from_details['params']['tag'],
+                                     self.call_id))
+
+        self._dialog_id_2 = frozenset((None,
+                                     self.original_msg.to_details['params'].get('tag'),
+                                     self.call_id))
+        
+        self.app._dialogs[self.dialog_id] = self
+        self.app._dialogs[self._dialog_id_2] = self
+        self._ack_received = False
+        self.dialog_state = State.NULL
 
     @property
     def dialog_id(self):
-        return frozenset((self.original_msg.to_details['params'].get('tag'),
-                          self.original_msg.from_details['params']['tag'],
-                          self.call_id))
+        return self._dialog_id
+    
+    @dialog_id.setter
+    def dialog_id(self, value):
+        if not isinstance(value, frozenset):
+            raise TypeError('dialog_id must be a frozenset')
+        self._dialog_id = value
+
+    def transition_state(self, msg):
+        if isinstance(msg, Response):
+            code = msg.status_code
+            if code < 200:
+                self.dialog_state = State.EARLY
+            elif code < 300:
+                self.dialog_state = State.CONFIRMED
+            else:
+                self.dialog_state = State.TERMINATED
+        else:
+            if msg.method == 'ACK':
+                self._ack_received = True
+                self.dialog_state = State.CONFIRMED
+            elif msg.method in ('BYE', 'CANCEL'):
+                self.dialog_state = State.TERMINATED
+
 
     def _receive_response(self, msg):
 
         if 'tag' not in self.to_details['params']:
-            del self.app._dialogs[self.dialog_id]
             self.to_details['params']['tag'] = msg.to_details['params']['tag']
+            self.unregister_dialog()
+            self.dialog_id = frozenset((
+                self.to_details['params'].get('tag'),
+                self.from_details['params'].get('tag'),
+                self.call_id,
+            ))
             self.app._dialogs[self.dialog_id] = self
 
         try:
@@ -112,6 +156,10 @@ class DialogBase:
             headers['Expires'] = expires
         return await self.request(self.original_msg.method, headers=headers, payload=self.original_msg.payload,
                                   timeout=timeout)
+
+    def unregister_dialog(self):
+        self.app._dialogs.pop(self.dialog_id, None)
+        self.app._dialogs.pop(self._dialog_id_2, None)
 
     def ack(self, msg, headers=None, *args, **kwargs):
         headers = CIMultiDict(headers or {})
@@ -179,17 +227,11 @@ class DialogBase:
         for transactions in self.transactions.values():
             for transaction in transactions.values():
                 transaction.close()
+    
+        self.transactions.clear()
+        
+        self.unregister_dialog()
 
-        # Should not be necessary once dialog are correctly tracked
-        try:
-            del self.app._dialogs[self.dialog_id]
-            del self.app._dialogs[
-                    frozenset((self.original_msg.to_details['params'].get('tag'),
-                               None,
-                               self.call_id))
-            ]
-        except KeyError as e:
-            pass
 
     def _connection_lost(self):
         for transactions in self.transactions.values():
@@ -223,6 +265,7 @@ class DialogBase:
     async def reply(self, request, status_code, status_message=None, payload=None, headers=None, contact_details=None):
         msg = self._prepare_response(request, status_code, status_message, payload, headers, contact_details)
         self.peer.send_message(msg)
+        self.transition_state(msg)
 
     def _prepare_response(self, request, status_code, status_message=None, payload=None, headers=None,
                           contact_details=None):
@@ -281,47 +324,36 @@ class Dialog(DialogBase):
         if self.cseq < msg.cseq:
             self.cseq = msg.cseq
 
-        if isinstance(msg, Response) or msg.method == 'ACK':
-            return self._receive_response(msg)
+        if isinstance(msg, Response):
+            self._receive_response(msg)
         else:
-            return await self._receive_request(msg)
+            await self._receive_request(msg)
 
     async def _receive_request(self, msg):
-
-        if 'tag' in msg.to_details['params']:
-            try:
-                del self.app._dialogs[
-                    frozenset((self.original_msg.to_details['params'].get('tag'),
-                               None,
-                               self.call_id))
-                ]
-            except KeyError:
-                pass
-
+        self.transition_state(msg)
+        self._maybe_close(msg) # TODO: Seems the issue is here        
         await self._incoming.put(msg)
-        self._maybe_close(msg)
 
     async def refresh(self, headers=None, expires=1800, *args, **kwargs):
         headers = CIMultiDict(headers or {})
         if 'Expires' not in headers:
             headers['Expires'] = int(expires)
         return await self.request(self.original_msg.method, headers=headers, *args, **kwargs)
-
+    
     async def close(self, headers=None, fast=False, *args, **kwargs):
         if not self._closed:
             self._closed = True
-            result = None
+
             if not fast and not self.inbound and self.original_msg.method in ('REGISTER', 'SUBSCRIBE'):
                 headers = CIMultiDict(headers or {})
                 if 'Expires' not in headers:
                     headers['Expires'] = 0
                 try:
-                    result = await self.request(self.original_msg.method, headers=headers, *args, **kwargs)
+                    await self.request(self.original_msg.method, headers=headers, *args, **kwargs)
                 finally:
                     self._close()
 
             self._close()
-            return result
 
     async def notify(self, *args, headers=None, **kwargs):
         headers = CIMultiDict(headers or {})

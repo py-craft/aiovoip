@@ -4,6 +4,7 @@ Following tools and libraries are needed in order to run the benchmark:
 - `sipp` - a free SIP testing tool. (For MacOS, you can install it using `brew install sipp`.)
 - `psrecord` - a Python utility to record the CPU and memory usage of a process. (Install it using `uv pip install psrecord`.)
 - `matplotlib` - a Python library for plotting graphs (needed by --plot flag for psrecord). (Install it using `uv pip install matplotlib`.)
+- `aiovoip` - You need to install the library in a dev mode: `uv pip install -e .`
 
 You need first run the sip server, for example it could be `examples/call/server.py`:
 

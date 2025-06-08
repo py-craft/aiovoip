@@ -26,6 +26,7 @@ async def test_notify(test_server, protocol, loop, from_details, to_details, clo
                 if msg.method == 'SUBSCRIBE':
                     expires = int(msg.headers['Expires'])
                     await dialog.reply(msg, status_code=200, headers={'Expires': expires})
+                    break
 
     app = aiovoip.Application(loop=loop)
     server_app = aiovoip.Application(loop=loop, dialplan=Dialplan())

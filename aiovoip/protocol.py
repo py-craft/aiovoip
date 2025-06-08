@@ -2,7 +2,6 @@ import asyncio
 import logging
 
 from . import message
-from . import utils
 
 LOG = logging.getLogger(__name__)
 
