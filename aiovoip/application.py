@@ -25,14 +25,14 @@ from .via import Via
 LOG = logging.getLogger(__name__)
 
 DEFAULTS = {
-    'user_agent': 'Python/{0[0]}.{0[1]}.{0[2]} aiosip/{1}'.format(sys.version_info, __version__),
+    'user_agent': 'Python/{0[0]}.{0[1]}.{0[2]} aiovoip/{1}'.format(sys.version_info, __version__),
     'override_contact_host': None,
     'dialog_closing_delay': 10
 }
 
+
 class Request:
-    def __init__(self, app, peer, msg, call_id):
-        self.app = app
+    def __init__(self, peer, msg, call_id):
         self.peer = peer
         self.msg = msg
         self.call_id = call_id
@@ -124,9 +124,8 @@ class Application(MutableMapping):
         for middleware_factory in reversed(self._middleware):
             route = await middleware_factory(route)
 
-        app = self
         call_id = msg.headers['Call-ID']
-        request = Request(app, peer, msg, call_id)
+        request = Request(peer, msg, call_id)
         await route(request, msg)
 
     async def _dispatch(self, protocol, msg, addr):
@@ -150,7 +149,7 @@ class Application(MutableMapping):
 
         # If we got a response without an associated message (likely a stale retransmission, drop it)
         # If we got an ACK, but nowhere to deliver it, drop it. 
-        if isinstance(msg, Response) or msg.method == 'ACK':
+        if isinstance(msg, Response) or msg.method == 'ACK' or msg.method == 'BYE':
             LOG.debug('Discarding incoming message: %s', msg)
             return
 
@@ -192,10 +191,11 @@ class Application(MutableMapping):
                 return
 
             t = asyncio.create_task(self._call_route(peer, route, msg))
-            # TODO Use a weakref here
             self._tasks.append(t)
-            await t
-            self._tasks.remove(t)
+            try:
+                await t
+            finally:
+                self._tasks.remove(t)
         except asyncio.CancelledError:
             pass
         except Exception as e:

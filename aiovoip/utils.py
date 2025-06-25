@@ -141,6 +141,8 @@ def _callback(f):
         pass
     except Exception as e:
         LOG.exception(e)
+    finally:
+        f = None
 
 def identify_caller():
     # Get the current call stack, used for debugging purposes

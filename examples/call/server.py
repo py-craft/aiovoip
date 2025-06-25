@@ -1,8 +1,7 @@
 import argparse
 import asyncio
-import logging
-
 import aiovoip
+import logging
 
 sip_config = {
     'srv_host': 'xxxxxx',
@@ -17,21 +16,17 @@ sip_config = {
 
 async def on_invite(request, message):
     print('Call ringing!')
-    # Sending 100 Trying
     dialog = await request.prepare(status_code=100)
-    # Sending 180 Ringing
     await dialog.reply(message, status_code=180)
-    print('Ringing for 3 seconds!')
-    await asyncio.sleep(3)
-    # Sending 200 OK - answer the call
-    await dialog.reply(message, status_code=200)
-    print('Call started!')
 
-    async for message in dialog:
-        await dialog.reply(message, 200)
-        if message.method == 'BYE':
-            print("Call ended!")
+    await dialog.reply(message, status_code=200)
+    
+    async for msg in dialog:
+        if msg.method == 'BYE':
+            await dialog.reply(msg, 200)
             break
+
+    await dialog.close()
 
 class Dialplan(aiovoip.BaseDialplan):
 
