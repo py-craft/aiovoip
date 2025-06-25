@@ -30,19 +30,6 @@ DEFAULTS = {
     'dialog_closing_delay': 10
 }
 
-active_tasks = set()
-
-def _task_callback(f):
-    active_tasks.discard(f)
-    try:
-        result = f.result()
-        del result
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        LOG.exception(e)
-    finally:
-        f = None
 
 class Request:
     def __init__(self, peer, msg, call_id):
@@ -203,8 +190,12 @@ class Application(MutableMapping):
                 await reply(msg, status_code=501)
                 return
 
-            await self._call_route(peer, route, msg)
-            
+            t = asyncio.create_task(self._call_route(peer, route, msg))
+            self._tasks.append(t)
+            try:
+                await t
+            finally:
+                self._tasks.remove(t)
         except asyncio.CancelledError:
             pass
         except Exception as e:
