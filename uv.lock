@@ -16,7 +16,7 @@ wheels = [
 
 [[package]]
 name = "aiovoip"
-version = "0.2.3"
+version = "0.3.1"
 source = { virtual = "." }
 dependencies = [
     { name = "aiodns" },
