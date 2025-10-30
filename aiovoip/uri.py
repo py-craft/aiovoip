@@ -20,7 +20,10 @@ URI_PATTERN = re.compile(r'^(?P<scheme>[a-zA-Z][a-zA-Z0-9\+\-\.]*):'  # scheme
 
 class Uri(MutableMapping):
     def __init__(self, uri):
-        self._uri = URI_PATTERN.match(uri).groupdict()
+        matched_uri = URI_PATTERN.match(uri)
+        if not matched_uri:
+            raise ValueError('Not valid uri address')
+        self._uri = matched_uri.groupdict()
         if 'host' not in self._uri:
             raise ValueError('host is a mandatory field')
         elif self._uri['host'] == 'localhost':

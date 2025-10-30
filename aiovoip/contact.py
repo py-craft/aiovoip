@@ -16,12 +16,21 @@ CONTACT_PATTERNS = [
                r'<(?P<uri>[^>]+)>'
                r'[ \t]*'
                r'(?:;(?P<params>[^\?]*))?'),
-    # quoted name
-    re.compile(r'^(?:"(?P<name>[^"]+)")'
+    # quoted name (including empty quotes)
+    re.compile(r'^(?:"(?P<name>[^"]*)")'
                r'[ \t]*'
                r'<(?P<uri>[^>]+)>'
                r'[ \t]*'
                r'(?:;(?P<params>[^\?]*))?'),
+    # malformed name
+    re.compile(
+        r'(?P<name>[^< ]+)'
+        r'[ \t]*'
+        r'[<]?'
+        r'(?P<uri>sip:[^> ;]+)'
+        r'[ \t]*'
+        r'(?:[; >]*(?P<params>[^\?]*))?'
+    ),
     # no name
     re.compile(r'(?P<name>)'
                r'[ \t]*'
@@ -55,11 +64,14 @@ class Contact(MutableMapping):
     @classmethod
     def from_header(cls, contact):
         for s in CONTACT_PATTERNS:
-            m = s.match(contact)
-            if m:
-                return cls(m.groupdict())
+            try:
+                m = s.match(contact)
+                if m:
+                    return cls(m.groupdict())
+            except ValueError:
+                continue
         else:
-            raise ValueError('Not valid contact address')
+            raise ValueError("Not valid contact address")
 
     def __str__(self):
         r = ''
