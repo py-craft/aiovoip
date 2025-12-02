@@ -206,7 +206,10 @@ class Message:
     @classmethod
     def from_raw_headers(cls, raw_headers):
         headers = CIMultiDict()
-        decoded_headers = raw_headers.decode().split(utils.EOL)
+        try:
+            decoded_headers = raw_headers.decode().split(utils.EOL)
+        except UnicodeDecodeError:
+            decoded_headers = raw_headers.decode('latin-1').split(utils.EOL)
         for line in decoded_headers[1:]:
             k, v = line.split(': ', 1)
             if k in headers:
