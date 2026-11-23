@@ -317,12 +317,12 @@ class Response(Message):
         if not status_message:
             status_message = utils.STATUS[int(status_code)]
 
-        if cseq:
+        if cseq is not None:
             self._cseq = cseq
         elif 'CSeq' not in self.headers:
             raise ValueError('"CSeq" header or cseq is required')
 
-        if method:
+        if method is not None:
             self._method = method
         elif 'CSeq' not in self.headers:
             raise ValueError('"CSeq" header or method is required')
