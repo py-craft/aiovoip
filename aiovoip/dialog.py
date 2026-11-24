@@ -125,7 +125,7 @@ class DialogBase:
 
     def _prepare_request(self, method, contact_details=None, headers=None, payload=None, cseq=None, to_details=None):
 
-        if not cseq:
+        if cseq is None:
             self.cseq += 1
 
         if contact_details:
@@ -140,7 +140,7 @@ class DialogBase:
 
         msg = Request(
             method=method,
-            cseq=cseq or self.cseq,
+            cseq=self.cseq if cseq is None else cseq,
             from_details=self.from_details,
             to_details=to_details or self.to_details,
             contact_details=self.contact_details,
